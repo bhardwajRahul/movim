@@ -5,6 +5,7 @@ namespace App;
 use Movim\Model;
 use Movim\Image;
 use Movim\Route;
+use Movim\Session;
 
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Capsule\Manager as DB;
@@ -222,7 +223,27 @@ class Message extends Model
             || $stanza->{'stanza-id'}->attributes()->by == \App\User::me()->id
             )
         ) {
-            $this->stanzaid = (string)$stanza->{'stanza-id'}->attributes()->id;
+            if ($this->isMuc()) {
+                $session = Session::start();
+
+                // Cache the state in Session for performances purpose
+                $sessionKey = $this->jidfrom . '_stanza_id';
+                $conferenceStanzaIdEnabled = $session->get($sessionKey, null);
+
+                if ($conferenceStanzaIdEnabled == null) {
+                    $conference = $this->user->session->conferences()
+                        ->where('conference', $this->jidfrom)
+                        ->first();
+
+                    $session->set($sessionKey, $conference && $conference->info && $conference->info->hasStanzaId());
+                }
+
+                if ($session->get($sessionKey, false)) {
+                    $this->stanzaid = (string)$stanza->{'stanza-id'}->attributes()->id;
+                }
+            } else {
+                $this->stanzaid = (string)$stanza->{'stanza-id'}->attributes()->id;
+            }
         }
 
         // If it's a MUC message, we assume that the server already handled it
